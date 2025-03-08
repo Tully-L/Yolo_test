@@ -18,9 +18,7 @@ class Worker:
         model_path, _ = QFileDialog.getOpenFileName(None, "选择模型文件", "", "模型文件 (*.pt)")
         if model_path:
             self.model = YOLO(model_path)
-            model = YOLO(model_path)
-            model.to('cpu')
-
+            self.model.to('cpu')
             if self.model:
                 return True
             else:
@@ -29,21 +27,14 @@ class Worker:
     def detect_objects(self, results):
         det_info = []
         for frame in results:
-            # 初始化类别名称字典
             class_names_dict = frame.names
-
-            # 检查是否有OBB数据
             if hasattr(frame, 'obb') and frame.obb is not None:
-                # 从OBB对象中获取类别ID
                 class_ids = frame.obb.cls
-                # 遍历每个类别ID
                 for class_id in class_ids:
                     class_name = class_names_dict[int(class_id)]
                     det_info.append(class_name)
             else:
-                # 如果没有OBB数据，则可能需要处理其他类型的检测结果或给出提示
                 print("No OBB data found in the frame.")
-        print("bb")
         return det_info
 
     def save_image(self, image):
@@ -61,18 +52,16 @@ class MainWindow(QMainWindow):
         # self.setWindowIcon(QIcon("icon.png"))
         self.setGeometry(300, 150, 1200, 600)
 
-        # 创建两个 QLabel 分别显示左右图像
         self.label1 = QLabel()
         self.label1.setAlignment(Qt.AlignCenter)
-        self.label1.setMinimumSize(580, 450)  # 设置大小
-        self.label1.setStyleSheet('border:3px solid #6950a1; background-color: black;')  # 添加边框并设置背景颜色为黑色
+        self.label1.setMinimumSize(580, 450)
+        self.label1.setStyleSheet('border:3px solid #6950a1; background-color: black;')
 
         self.label2 = QLabel()
         self.label2.setAlignment(Qt.AlignCenter)
-        self.label2.setMinimumSize(580, 450)  # 设置大小
-        self.label2.setStyleSheet('border:3px solid #6950a1; background-color: black;')  # 添加边框并设置背景颜色为黑色
+        self.label2.setMinimumSize(580, 450)
+        self.label2.setStyleSheet('border:3px solid #6950a1; background-color: black;')
 
-        # 水平布局，用于放置左右两个 QLabel
         layout = QVBoxLayout()
         hbox_video = QHBoxLayout()
         hbox_video.addWidget(self.label1)
@@ -81,43 +70,43 @@ class MainWindow(QMainWindow):
 
         self.worker = Worker()
 
-        # 创建按钮布局
         hbox_buttons = QHBoxLayout()
-        # 添加模型选择按钮
+
         self.load_model_button = QPushButton("👆模型选择")
         self.load_model_button.clicked.connect(self.load_model)
         self.load_model_button.setFixedSize(120, 30)
         hbox_buttons.addWidget(self.load_model_button)
 
-        # 添加图片检测按钮
         self.image_detect_button = QPushButton("🖼️️图片检测")
         self.image_detect_button.clicked.connect(self.select_image)
         self.image_detect_button.setEnabled(False)
         self.image_detect_button.setFixedSize(120, 30)
         hbox_buttons.addWidget(self.image_detect_button)
 
-        # 添加图片文件夹检测按钮
         self.folder_detect_button = QPushButton("️📁文件夹检测")
         self.folder_detect_button.clicked.connect(self.detect_folder)
         self.folder_detect_button.setEnabled(False)
         self.folder_detect_button.setFixedSize(120, 30)
         hbox_buttons.addWidget(self.folder_detect_button)
 
-        # 添加显示检测物体按钮
+        self.video_detect_button = QPushButton("🎥视频检测")
+        self.video_detect_button.clicked.connect(self.select_video)
+        self.video_detect_button.setEnabled(False)
+        self.video_detect_button.setFixedSize(120, 30)
+        hbox_buttons.addWidget(self.video_detect_button)
+
         self.display_objects_button = QPushButton("🔍显示检测物体")
         self.display_objects_button.clicked.connect(self.show_detected_objects)
         self.display_objects_button.setEnabled(True)
         self.display_objects_button.setFixedSize(120, 30)
         hbox_buttons.addWidget(self.display_objects_button)
 
-        # # 添加保存检测结果按钮
         self.save_button = QPushButton("💾保存检测结果")
         self.save_button.clicked.connect(self.save_detection)
         self.save_button.setEnabled(False)
         self.save_button.setFixedSize(120, 30)
         hbox_buttons.addWidget(self.save_button)
 
-        # 添加退出按钮
         self.exit_button = QPushButton("❌退出")
         self.exit_button.clicked.connect(self.exit_application)
         self.exit_button.setFixedSize(120, 30)
@@ -127,6 +116,10 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_frame)
+        self.cap = None
 
     def save_detection(self):
         detection_type = self.worker.detection_type
@@ -151,9 +144,40 @@ class MainWindow(QMainWindow):
             for image_path in image_paths:
                 self.detect_image(image_path)
 
+    def select_video(self):
+        video_path, _ = QFileDialog.getOpenFileName(None, "选择视频文件", "", "视频文件 (*.mp4 *.avi)")
+        if video_path:
+            self.cap = cv2.VideoCapture(video_path)
+            if self.cap.isOpened():
+                self.timer.start(30)  # 每30毫秒更新一帧
+
+    def update_frame(self):
+        ret, frame = self.cap.read()
+        if ret:
+            results = self.worker.model.predict(frame)
+            self.worker.detection_type = "video"
+            if results:
+                self.current_results = results
+                annotated_frame = results[0].plot()
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                height1, width1, channel1 = frame_rgb.shape
+                bytesPerLine1 = 3 * width1
+                qimage1 = QImage(frame_rgb.data, width1, height1, bytesPerLine1, QImage.Format_RGB888)
+                pixmap1 = QPixmap.fromImage(qimage1)
+                self.label1.setPixmap(pixmap1.scaled(self.label1.size(), Qt.KeepAspectRatio))
+
+                annotated_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
+                height2, width2, channel2 = annotated_frame.shape
+                bytesPerLine2 = 3 * width2
+                qimage2 = QImage(annotated_frame.data, width2, height2, bytesPerLine2, QImage.Format_RGB888)
+                pixmap2 = QPixmap.fromImage(qimage2)
+                self.label2.setPixmap(pixmap2.scaled(self.label2.size(), Qt.KeepAspectRatio))
+        else:
+            self.timer.stop()
+            self.cap.release()
+
     def detect_image(self, image_path):
         if image_path:
-            print(image_path)
             image = cv2.imread(image_path)
             if image is not None:
                 if self.flag == 0:
@@ -178,17 +202,15 @@ class MainWindow(QMainWindow):
                     pixmap2 = QPixmap.fromImage(qimage2)
                     self.label2.setPixmap(pixmap2.scaled(self.label2.size(), Qt.KeepAspectRatio))
                     self.save_button.setEnabled(True)
-            cv2.waitKey(300)  # 修改图片切换时间
+            cv2.waitKey(300)
 
     def save_detection_results(self):
         if self.worker.current_annotated_image is not None:
             self.worker.save_image(self.worker.current_annotated_image)
 
     def show_detected_objects(self):
-        frame = self.current_results
-        print("aa")
-        if frame:
-            det_info = self.worker.detect_objects(frame)
+        if hasattr(self, 'current_results') and self.current_results:
+            det_info = self.worker.detect_objects(self.current_results)
             if det_info:
                 object_count = len(det_info)
                 object_info = f"识别到的物体总个数：{object_count}\n"
@@ -204,6 +226,8 @@ class MainWindow(QMainWindow):
                 self.show_message_box("识别结果", object_info)
             else:
                 self.show_message_box("识别结果", "未检测到物体")
+        else:
+            self.show_message_box("提示", "请先进行检测操作。")
 
     def show_message_box(self, title, message):
         msg_box = QMessageBox(self)
@@ -215,14 +239,18 @@ class MainWindow(QMainWindow):
         if self.worker.load_model():
             self.image_detect_button.setEnabled(True)
             self.folder_detect_button.setEnabled(True)
+            self.video_detect_button.setEnabled(True)
             self.display_objects_button.setEnabled(True)
 
     def exit_application(self):
+        if self.cap is not None and self.cap.isOpened():
+            self.cap.release()
         sys.exit()
 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    print("Added Video Button!!! BUt can not recognize the objects.")
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
