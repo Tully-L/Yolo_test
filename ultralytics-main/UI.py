@@ -18,6 +18,9 @@ class Worker:
         model_path, _ = QFileDialog.getOpenFileName(None, "选择模型文件", "", "模型文件 (*.pt)")
         if model_path:
             self.model = YOLO(model_path)
+            model = YOLO(model_path)
+            model.to('cpu')
+
             if self.model:
                 return True
             else:
@@ -54,7 +57,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("@author：笑脸惹桃花")
+        self.setWindowTitle("@author：Tully")
         # self.setWindowIcon(QIcon("icon.png"))
         self.setGeometry(300, 150, 1200, 600)
 
