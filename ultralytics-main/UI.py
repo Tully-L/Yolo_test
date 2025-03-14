@@ -250,7 +250,7 @@ class MainWindow(QMainWindow):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    print("Added Video Button!!! BUt can not recognize the objects.")
+    print("Added Video Button!!! But can not recognize the objects.")
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
